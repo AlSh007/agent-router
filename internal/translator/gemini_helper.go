@@ -604,17 +604,19 @@ func isGeminiFlashModel(model internalapi.RequestModel) bool {
 }
 
 // supportsMediumThinkingLevel reports whether the model accepts the "medium" thinking level.
-// Gemini 3 Pro only lists "low" and "high"; Flash and Gemini 3.1 Pro also list "medium".
+// Gemini 3 Pro only lists "low" and "high", and Gemini 3.1 Flash-Lite Image only "minimal" and "high";
+// Flash and Gemini 3.1 Pro also list "medium".
 // https://ai.google.dev/gemini-api/docs/thinking#thinking-levels
 func supportsMediumThinkingLevel(model internalapi.RequestModel) bool {
-	return !strings.Contains(strings.ToLower(model), "gemini-3-pro")
+	m := strings.ToLower(model)
+	return !strings.Contains(m, "gemini-3-pro") && !strings.Contains(m, "flash-lite-image")
 }
 
 // mapReasoningEffortToThinkingLevel converts OpenAI reasoning effort levels to Gemini thinking levels.
 // The mapping depends on the model type:
 // - "none" → ThinkingLevelMinimal (Gemini Flash only)
 // - "low" → ThinkingLevelLow
-// - "medium" → ThinkingLevelMedium, except ThinkingLevelHigh for Gemini 3 Pro, which has no medium level
+// - "medium" → ThinkingLevelMedium, except ThinkingLevelHigh for Gemini 3 Pro and 3.1 Flash-Lite Image, which have no medium level
 // - "high" → ThinkingLevelHigh (every Gemini 3 model; it is the Pro default)
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/get-started-with-gemini-3#openai-example
 func mapReasoningEffortToThinkingLevel(reasonEffort openai.ReasoningEffort, model internalapi.RequestModel) (genai.ThinkingLevel, error) {

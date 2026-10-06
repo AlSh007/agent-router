@@ -3479,6 +3479,12 @@ func TestMapReasoningEffortToThinkingLevel(t *testing.T) {
 			expectedThinking: genai.ThinkingLevelMedium,
 		},
 		{
+			name:             "medium effort on Gemini 3.1 Flash-Lite Image maps to ThinkingLevelHigh",
+			reasoningEffort:  openai.ReasoningEffortMedium,
+			model:            "gemini-3.1-flash-lite-image",
+			expectedThinking: genai.ThinkingLevelHigh,
+		},
+		{
 			name:             "high effort on Flash maps to ThinkingLevelHigh",
 			reasoningEffort:  openai.ReasoningEffortHigh,
 			model:            "gemini-3-flash",
