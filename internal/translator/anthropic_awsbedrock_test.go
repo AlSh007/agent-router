@@ -491,6 +491,18 @@ func TestAnthropicToAWSBedrockTranslator_ResponseBody_StreamingRecordsSpanChunks
 	require.Contains(t, recorded, "message_stop")
 }
 
+func TestRecordStreamedChunks(t *testing.T) {
+	t.Run("nil span", func(t *testing.T) {
+		recordStreamedChunks(nil, []byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
+	})
+	t.Run("skips lines that are not valid data events", func(t *testing.T) {
+		span := &chunkRecordingSpan{}
+		recordStreamedChunks(span, []byte("event: message_start\ndata: not-json\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
+		require.Len(t, span.chunks, 1)
+		require.Equal(t, anthropicschema.MessagesStreamChunkType("message_stop"), span.chunks[0].Type)
+	})
+}
+
 func TestAnthropicToAWSBedrockTranslator_ResponseBody_StreamingThinking(t *testing.T) {
 	translator := NewAnthropicToAWSBedrockTranslator("")
 	req := &anthropicschema.MessagesRequest{
