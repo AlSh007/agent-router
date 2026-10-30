@@ -434,6 +434,63 @@ func TestAnthropicToAWSBedrockTranslator_ResponseBody_Streaming(t *testing.T) {
 	assert.Contains(t, bodyStr, `"text":""`)
 }
 
+// chunkRecordingSpan collects the streamed chunks recorded on the span.
+type chunkRecordingSpan struct {
+	chunks []anthropicschema.MessagesStreamChunk
+}
+
+func (s *chunkRecordingSpan) RecordResponse(*anthropicschema.MessagesResponse) {}
+func (s *chunkRecordingSpan) RecordResponseChunk(c *anthropicschema.MessagesStreamChunk) {
+	s.chunks = append(s.chunks, *c)
+}
+func (s *chunkRecordingSpan) EndSpanOnError(int, []byte) {}
+func (s *chunkRecordingSpan) EndSpan()                   {}
+
+func TestAnthropicToAWSBedrockTranslator_ResponseBody_StreamingRecordsSpanChunks(t *testing.T) {
+	translator := NewAnthropicToAWSBedrockTranslator("")
+	req := &anthropicschema.MessagesRequest{
+		Model:     "test-model",
+		MaxTokens: 100,
+		Stream:    true,
+		Messages: []anthropicschema.MessageParam{
+			{Role: anthropicschema.MessageRoleUser, Content: anthropicschema.MessageContent{Text: "Hi"}},
+		},
+	}
+	rawBody, _ := json.Marshal(req)
+	_, _, _ = translator.RequestBody(rawBody, req, false)
+
+	var eventStreamData bytes.Buffer
+	for _, ev := range []struct {
+		eventType string
+		payload   map[string]any
+	}{
+		{"messageStart", map[string]any{"role": "assistant"}},
+		{"contentBlockDelta", map[string]any{"contentBlockIndex": 0, "delta": map[string]any{"text": "Hello"}}},
+		{"contentBlockStop", map[string]any{"contentBlockIndex": 0}},
+		{"messageStop", map[string]any{"stopReason": "end_turn"}},
+		{"metadata", map[string]any{"usage": map[string]any{"inputTokens": 5, "outputTokens": 3, "totalTokens": 8}}},
+	} {
+		payload, err := json.Marshal(ev.payload)
+		require.NoError(t, err)
+		writeEventStreamMessage(t, &eventStreamData, ev.eventType, payload)
+	}
+
+	span := &chunkRecordingSpan{}
+	_, body, _, _, err := translator.ResponseBody(nil, &eventStreamData, true, span)
+	require.NoError(t, err)
+
+	// Every SSE event sent to the client is also recorded on the span.
+	var recorded []string
+	for _, c := range span.chunks {
+		recorded = append(recorded, string(c.Type))
+	}
+	require.Equal(t, strings.Count(string(body), "event: "), len(recorded), "recorded %v for body %s", recorded, body)
+	require.Contains(t, recorded, "message_start")
+	require.Contains(t, recorded, "content_block_delta")
+	require.Contains(t, recorded, "message_delta")
+	require.Contains(t, recorded, "message_stop")
+}
+
 func TestAnthropicToAWSBedrockTranslator_ResponseBody_StreamingThinking(t *testing.T) {
 	translator := NewAnthropicToAWSBedrockTranslator("")
 	req := &anthropicschema.MessagesRequest{
